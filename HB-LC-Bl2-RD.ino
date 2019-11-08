@@ -1,5 +1,5 @@
 //- -----------------------------------------------------------------------------------------------------------------------
-// HB-LC-Bl2-24VRain
+// HB-LC-Bl2-RD
 // 2019-08-12 Stemaker Creative Commons - http://creativecommons.org/licenses/by-nc-sa/3.0/de/
 //
 // Based on HB-LC-Bl1-FM2 from pa-pa (https://github.com/jp112sdl/HM-LC-Bl1-FM-2)
@@ -7,17 +7,6 @@
 
 // define this to read the device id, serial and device type from bootloader section
 // #define USE_OTA_BOOTLOADER
-
-/* Entwicklungsschritte
- *   1) Umstellung der Implementierung von MutliChannelDevice auf allgemeines ChannelDevice, das
- *      die Kanäle registriert -> done
- *   2) Eigene device ID im sketch und entsprechend neues xml file auf der Zentrale. Keine
- *      Funktionserweiterung
- *   3) Regenkanal mit aufnehmen (noch ohne Funktion). Dritten Kanal im sketch einbauen und das xml
- *      für die Zentrale anpassen.
- *   4) Regensensor handling einbauen
- */
-
 
 #define EI_NOTEXTERNAL
 #include <EnableInterrupt.h>
@@ -95,8 +84,6 @@ public:
   }
 };
 
-
-
 class BlChannel : public ActorChannel<Hal, BlindList1, BlindList3, PEERS_PER_BLIND_CHANNEL, BlindList0, BlindStateMachine> {
   private:
     uint8_t on_relay_pin;
@@ -148,11 +135,11 @@ class BlChannel : public ActorChannel<Hal, BlindList1, BlindList3, PEERS_PER_BLI
 class RainEventMsg : public Message {
   public:
     void init(uint8_t msgcnt, bool israining) {
-      Message::init(0x09, msgcnt, 0x53, BIDI | RPTEN, 0x41, israining & 0xff);
+      Message::init(0x0b, msgcnt, 0x53, BIDI | RPTEN, 0x43, israining & 0xff);
     }
 };
 
-class RainChannel : public Channel<Hal, RainList1, EmptyList, EmptyList, PEERS_PER_RAIN_CHANNEL, BlindList0>, public Alarm {
+class RainChannel : public Channel<Hal, RainList1, EmptyList, List4, PEERS_PER_RAIN_CHANNEL, BlindList0>, public Alarm {
   public:
     uint8_t stat;
 
@@ -173,7 +160,13 @@ class RainChannel : public Channel<Hal, RainList1, EmptyList, EmptyList, PEERS_P
       RainEventMsg& rainmsg = (RainEventMsg&)device().message();
       rainmsg.init(device().nextcount(), stat==0?false:true);
       device().sendMasterEvent(rainmsg);
-      tick = (seconds2ticks(10));
+
+      static uint8_t evcnt = 0;
+      SensorEventMsg& rmsg = (SensorEventMsg&)device().message();
+      rmsg.init(device().nextcount(), number(), evcnt++, stat==0 ? 0 : 200, false , false);
+      device().sendPeerEvent(rmsg, *this);
+
+      tick = (seconds2ticks(300));
       clock.add(*this);
     }
 
@@ -213,20 +206,20 @@ class Blind2xAndRainDevice : public ChannelDevice<Hal, VirtBaseChannel<Hal, Blin
 Hal hal;
 Blind2xAndRainDevice sdev(devinfo, 0x20);
 ConfigButton<Blind2xAndRainDevice> cfgBtn(sdev);
-InternalButton<Blind2xAndRainDevice> btnup(sdev, 1);
-InternalButton<Blind2xAndRainDevice> btndown(sdev, 2);
-InternalButton<Blind2xAndRainDevice> btnup2(sdev, 3);
-InternalButton<Blind2xAndRainDevice> btndown2(sdev, 4);
+InternalButton<Blind2xAndRainDevice> btnup(sdev, 4);
+InternalButton<Blind2xAndRainDevice> btndown(sdev, 5);
+InternalButton<Blind2xAndRainDevice> btnup2(sdev, 6);
+InternalButton<Blind2xAndRainDevice> btndown2(sdev, 7);
 
 void initPeerings (bool first) {
   // create internal peerings - CCU2 needs this
   if ( first == true ) {
     HMID devid;
     sdev.getDeviceID(devid);
-    Peer p1(devid, 1);
-    Peer p2(devid, 2);
-    Peer p3(devid, 3);
-    Peer p4(devid, 4);
+    Peer p1(devid, 4);
+    Peer p2(devid, 5);
+    Peer p3(devid, 6);
+    Peer p4(devid, 7);
     sdev.channel(1).peer(p1, p2);
     sdev.channel(2).peer(p3, p4);
   }
