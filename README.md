@@ -4,7 +4,9 @@ Die firmware verwendet die Hardware von https://github.com/SteMaker/HB-LC-Bl2-24
 
 **Achtung: Ich übernehme keinerlei Verantwortung für die Sicherheit und Funktionsfähigkeit der Hardware wie auch der Firmware! Die Hardware verwendet Netzspannung 230V ist deshalb lebensgefährlich!**
 
-Die Entwicklung befindet sich in einem frühen Stadium, ich muss erst noch alle Teile auf github hochladen.
+Das Projekt basiert auf der AskSinPP library (asksinpp.de) und verwendet als Basis den 2-fach Rolladenaktor https://github.com/jp112sdl/HM-LC-Bl1-FM-2 von Jérôme (https://github.com/jp112sdl)
+
+Die Entwicklung befindet sich in einem frühen Stadium. Die Firmware ist nicht fertig und das add-on noch nicht hochgeladen.
 
 Details zur Hardware bitte auf der Seite der Hardware nachschauen.
 
@@ -16,3 +18,6 @@ Um den Regensensor mit dem Rolladenaktor zu verknüpfen - z.B. um eine Markise b
 - Die eigentlich Regensensorfunktionalität fehlt noch. Zur Zeit wird alle 5 Minuten zwischen Regen und kein Regen umgeschaltet
 - Direktverknüpfung zwischen Regensensor und den zwei Aktoren beim Start automatisch anlegen
 - ?? Parameter für den Regensensor, um das event "kein Regen" zu verzögern ??
+
+## Dankeschön
+Ein dickes, fettes Dankeschön an die homematic community sowas zu ermöglichen, insbesondere an pa-pa, Jérôme und Marco.
