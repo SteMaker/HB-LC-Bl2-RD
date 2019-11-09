@@ -1,6 +1,6 @@
 # HB-LC-Bl2-RD - Selbstbau HomeMatic Gerät für zwei Rolladenaktoren und einen Regensensor - Firmware
 ## Überblick
-Die firmware verwendet die Hardware von <to be uploaded>.
+Die firmware verwendet die Hardware von https://github.com/SteMaker/HB-LC-Bl2-24VRain-Board/.
 
 **Achtung: Ich übernehme keinerlei Verantwortung für die Sicherheit und Funktionsfähigkeit der Hardware wie auch der Firmware! Die Hardware verwendet Netzspannung 230V ist deshalb lebensgefährlich!**
 
