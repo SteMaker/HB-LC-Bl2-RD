@@ -35,6 +35,7 @@
 #define DOWN_BUTTON2_PIN 5
 
 #define RAIN_INPUT_PIN 7
+#define RAIN_POLL_INTERVAL 1
 
 // number of available peers per channel
 #define PEERS_PER_BLIND_CHANNEL 6
@@ -94,12 +95,15 @@ class BlChannel : public ActorChannel<Hal, BlindList1, BlindList3, PEERS_PER_BLI
     BlChannel () : on_relay_pin(0), dir_relay_pin(0) {}
     virtual ~BlChannel () {}
 
+    /* Method used to control the motor */
     virtual void switchState(uint8_t oldstate, uint8_t newstate, uint32_t stateDelay) {
       BaseChannel::switchState(oldstate, newstate, stateDelay);
       if ( newstate == AS_CM_JT_RAMPON && stateDelay > 0 ) {
+        /* TODO shall we only do this if level is < 100% ? */
         motorUp();
       }
       else if ( newstate == AS_CM_JT_RAMPOFF && stateDelay > 0 ) {
+        /* TODO shall we only do this if level is > 0% ? */
         motorDown();
       }
       else {
@@ -130,6 +134,36 @@ class BlChannel : public ActorChannel<Hal, BlindList1, BlindList3, PEERS_PER_BLI
       motorStop();
       BaseChannel::init();
     }
+
+    void setupList3ForRain(Peer rainPeer) {
+      BlindList3 l3 = getList3(rainPeer);
+      /* We do not use the long press of the rain sensor */ 
+      BlindPeerList pl3lg = l3.lg();
+      pl3lg.actionType(AS_CM_ACTIONTYPE_INACTIVE);
+    
+      BlindPeerList pl3 = l3.sh();
+      pl3.actionType(AS_CM_ACTIONTYPE_JUMP_TO_TARGET);
+      pl3.ctValLo(201); /* to enable condition to always fail */
+      pl3.ctValHi(180);
+      pl3.jtOff(AS_CM_JT_OFFDELAY);
+      pl3.ctOff(AS_CM_CT_X_GE_COND_VALUE_HI);
+      pl3.jtDlyOn(AS_CM_JT_OFFDELAY);
+      pl3.ctDlyOn(AS_CM_CT_X_GE_COND_VALUE_HI);
+      pl3.jtRefOn(AS_CM_JT_OFFDELAY);
+      pl3.ctRepOn(AS_CM_CT_X_GE_COND_VALUE_HI);
+      pl3.jtRampOn(AS_CM_JT_OFFDELAY);
+      pl3.ctRampOn(AS_CM_CT_X_GE_COND_VALUE_HI);
+      pl3.jtOn(AS_CM_JT_OFFDELAY);
+      pl3.ctOn(AS_CM_CT_X_GE_COND_VALUE_HI);
+      /* In following states we want to ignore the rain event since we are anyway
+       * in the right direction. We do this by using a condition that will never come true */
+      pl3.jtDlyOff(AS_CM_JT_OFFDELAY);
+      pl3.ctDlyOff(AS_CM_CT_COND_VALUE_LO_LE_X_LT_COND_VALUE_HI);
+      pl3.jtRefOff(AS_CM_JT_REFOFF);
+      pl3.ctRepOff(AS_CM_CT_COND_VALUE_LO_LE_X_LT_COND_VALUE_HI);
+      pl3.jtRampOff(AS_CM_JT_RAMPOFF);
+      pl3.ctRampOff(AS_CM_CT_COND_VALUE_LO_LE_X_LT_COND_VALUE_HI);
+    }
 };
 
 class RainEventMsg : public Message {
@@ -143,7 +177,8 @@ class RainChannel : public Channel<Hal, RainList1, EmptyList, List4, PEERS_PER_R
   public:
     uint8_t stat;
 
-    RainChannel() : stat(0), Alarm(seconds2ticks(10)) {}
+    /* We poll every second if the rain status changed */
+    RainChannel() : stat(0), Alarm(seconds2ticks(RAIN_POLL_INTERVAL)) {}
     virtual ~RainChannel() {}
 
     uint8_t flags () const {
@@ -155,18 +190,20 @@ class RainChannel : public Channel<Hal, RainList1, EmptyList, List4, PEERS_PER_R
       return stat;
     }
 
-    virtual void trigger (__attribute__ ((unused)) AlarmClock& clock) {
-      stat = ~stat;
-      RainEventMsg& rainmsg = (RainEventMsg&)device().message();
-      rainmsg.init(device().nextcount(), stat==0?false:true);
-      device().sendMasterEvent(rainmsg);
+    virtual void trigger (AlarmClock& clock) {
+      uint8_t israining = digitalRead(RAIN_INPUT_PIN);
+      if(stat != israining) {
+        stat = israining;
+        RainEventMsg& rainmsg = (RainEventMsg&)device().message();
+        rainmsg.init(device().nextcount(), stat==0?false:true);
+        device().sendMasterEvent(rainmsg);
 
-      static uint8_t evcnt = 0;
-      SensorEventMsg& rmsg = (SensorEventMsg&)device().message();
-      rmsg.init(device().nextcount(), number(), evcnt++, stat==0 ? 0 : 200, false , false);
-      device().sendPeerEvent(rmsg, *this);
-
-      tick = (seconds2ticks(300));
+        static uint8_t evcnt = 0;
+        SensorEventMsg& rmsg = (SensorEventMsg&)device().message();
+        rmsg.init(device().nextcount(), number(), evcnt++, stat==0 ? 0 : 200, false , false);
+        device().sendPeerEvent(rmsg, *this);
+      }
+      tick = (seconds2ticks(RAIN_POLL_INTERVAL));
       clock.add(*this);
     }
 
@@ -174,7 +211,6 @@ class RainChannel : public Channel<Hal, RainList1, EmptyList, List4, PEERS_PER_R
       Channel::setup(dev, number, addr);
       sysclock.add(*this);
     }
-  /* TODO */
 };
 
 class Blind2xAndRainDevice : public ChannelDevice<Hal, VirtBaseChannel<Hal, BlindList0>, 3, BlindList0> {
@@ -190,11 +226,11 @@ class Blind2xAndRainDevice : public ChannelDevice<Hal, VirtBaseChannel<Hal, Blin
     }
     virtual ~Blind2xAndRainDevice () {}
 
-    BlChannel& getChannel1() {
+    BlChannel& getBlindChannel1() {
       return blc1;
     }
 
-    BlChannel& getChannel2() {
+    BlChannel& getBlindChannel2() {
       return blc2;
     }
 
@@ -212,16 +248,36 @@ InternalButton<Blind2xAndRainDevice> btnup2(sdev, 6);
 InternalButton<Blind2xAndRainDevice> btndown2(sdev, 7);
 
 void initPeerings (bool first) {
-  // create internal peerings - CCU2 needs this
+  /* Create internal peerings
+   *  We peer the 4 internal buttons with the actors for up and down. A
+   *  peering on the receiver (blind actor) side is sufficient since the
+   *  internal buttons do not care about a peering list.
+   *  
+   *  We peer the rain detector with the blinds to send a rain event to
+   *  them on rain start and stop. We peer the blinds with the rain
+   *  detector to close them in case of starting rain. This includes a
+   *  setup of the respective List3 to ensure we close in any case.
+   */
   if ( first == true ) {
     HMID devid;
     sdev.getDeviceID(devid);
-    Peer p1(devid, 4);
-    Peer p2(devid, 5);
-    Peer p3(devid, 6);
-    Peer p4(devid, 7);
-    sdev.channel(1).peer(p1, p2);
-    sdev.channel(2).peer(p3, p4);
+    Peer pBlind1(devid, 1);
+    Peer pBlind2(devid, 1);
+    Peer pRain(devid, 3);
+    Peer pUp1(devid, 4);
+    Peer pDown1(devid, 5);
+    Peer pUp2(devid, 6);
+    Peer pDown2(devid, 7);
+
+    sdev.getBlindChannel1().peer(pUp1, pDown1);
+    sdev.getBlindChannel1().peer(pRain);
+    sdev.getRainChannel().peer(pBlind1);
+    sdev.getBlindChannel1().setupList3ForRain(pRain);
+
+    sdev.getBlindChannel2().peer(pUp2, pDown2);
+    sdev.getBlindChannel2().peer(pRain);
+    sdev.getRainChannel().peer(pBlind2);
+    sdev.getBlindChannel2().setupList3ForRain(pRain);
   }
 }
 
@@ -229,8 +285,8 @@ void setup () {
   DINIT(57600, ASKSIN_PLUS_PLUS_IDENTIFIER);
   //storage().setByte(0,0);
   bool first = sdev.init(hal);
-  sdev.getChannel1().init(ON_RELAY_PIN, DIR_RELAY_PIN);
-  sdev.getChannel2().init(ON_RELAY2_PIN, DIR_RELAY2_PIN);
+  sdev.getBlindChannel1().init(ON_RELAY_PIN, DIR_RELAY_PIN);
+  sdev.getBlindChannel2().init(ON_RELAY2_PIN, DIR_RELAY2_PIN);
 
   buttonISR(cfgBtn, CONFIG_BUTTON_PIN);
   buttonISR(btnup, UP_BUTTON_PIN);
