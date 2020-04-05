@@ -164,6 +164,13 @@ class BlChannel : public ActorChannel<Hal, BlindList1, BlindList3, PEERS_PER_BLI
       pl3.jtRampOff(AS_CM_JT_RAMPOFF);
       pl3.ctRampOff(AS_CM_CT_COND_VALUE_LO_LE_X_LT_COND_VALUE_HI);
     }
+
+    // Setup via webui doesn't work, so I am setting the one I need here
+    void setRunningTime(void) {
+      BlindList1 list1 = getList1();
+      list1.refRunningTimeTopBottom(450);
+      list1.refRunningTimeBottomTop(450);
+    }
 };
 
 class RainEventMsg : public Message {
@@ -177,8 +184,9 @@ class RainChannel : public Channel<Hal, RainList1, EmptyList, List4, PEERS_PER_R
   public:
     uint8_t stat;
 
-    /* We poll every second if the rain status changed */
-    RainChannel() : stat(0), Alarm(seconds2ticks(RAIN_POLL_INTERVAL)) {}
+    /* We poll every second if the rain status changed, at boot we init status to opposite of real
+       status so that we send a telegram at boot */
+    RainChannel() : stat(digitalRead(RAIN_INPUT_PIN)), Alarm(seconds2ticks(RAIN_POLL_INTERVAL)) {}
     virtual ~RainChannel() {}
 
     uint8_t flags () const {
@@ -191,7 +199,7 @@ class RainChannel : public Channel<Hal, RainList1, EmptyList, List4, PEERS_PER_R
     }
 
     virtual void trigger (AlarmClock& clock) {
-      uint8_t israining = digitalRead(RAIN_INPUT_PIN);
+      uint8_t israining = !digitalRead(RAIN_INPUT_PIN);
       if(stat != israining) {
         stat = israining;
         RainEventMsg& rainmsg = (RainEventMsg&)device().message();
@@ -278,6 +286,9 @@ void initPeerings (bool first) {
     sdev.getBlindChannel2().peer(pRain);
     sdev.getRainChannel().peer(pBlind2);
     sdev.getBlindChannel2().setupList3ForRain(pRain);
+
+    sdev.getBlindChannel1().setRunningTime();
+    sdev.getBlindChannel2().setRunningTime();
   }
 }
 
